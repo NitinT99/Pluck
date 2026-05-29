@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pluck — YouTube Downloader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <span class="logo-icon">↓</span>
+            <span class="logo-text">Pl<span>u</span>ck</span>
+        </div>
+        <span class="tagline">YouTube Audio & Video Downloader</span>
+    </header>
+
+    <main>
+        <div class="search-box">
+
+            <!-- URL Row -->
+            <div class="url-row">
+                <div class="url-input">
+                    <input type="text"
+                           id="media-url"
+                           placeholder="Paste YouTube or YouTube Music link here..."
+                           autocomplete="off"
+                           onpaste="onUrlPaste()"
+                           oninput="onUrlInput()">
+                    <button class="btn-clear" id="clear-btn"
+                            onclick="clearUrl()" style="display:none">✕</button>
+                </div>
+                <button class="btn-primary" id="download-btn" onclick="downloadMedia()">
+                    <span class="btn-icon">↓</span>
+                    Pluck It!
+                </button>
+            </div>
+
+            <!-- Video preview -->
+            <div class="video-preview" id="video-preview" style="display:none">
+                <div class="video-thumb" id="video-thumb"></div>
+                <div class="video-meta">
+                    <div class="video-title" id="preview-title"></div>
+                    <div class="video-sub">
+                        <span id="preview-uploader"></span>
+                        <span class="dot">·</span>
+                        <span id="preview-duration"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options row -->
+            <div class="options-row">
+                <div class="select-wrapper">
+                    <select id="media-type" onchange="onMediaTypeChange()">
+                        <option value="audio">🎵 Audio (MP3)</option>
+                        <option value="video"selected>🎬 Video (MP4)</option>
+                    </select>
+                    <span class="select-arrow">▾</span>
+                </div>
+                <div class="select-wrapper">
+                    <select id="media-quality">
+                        <option value="best">Best Quality</option>
+                        <option value="2k">2K (1440p)</option>
+                        <option value="1080">Full HD (1080p)</option>
+                        <option value="720">HD (720p)</option>
+                        <option value="480">SD (480p)</option>
+                    </select>
+                    <span class="select-arrow">▾</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Status -->
+        <div class="status-box" id="status" style="display:none">
+            <div class="status-header">
+                <span class="status-icon" id="status-icon"></span>
+                <span class="status-message" id="status-message"></span>
+            </div>
+            <div class="status-details" id="status-details"></div>
+        </div>
+
+        <!-- Result -->
+        <div class="preview-box" id="result" style="display:none">
+            <div class="preview-header">
+                <h3 id="result-title"></h3>
+                <span class="preview-meta" id="result-meta"></span>
+            </div>
+            <div class="media-info">
+                <div class="media-info-row">
+                    <span class="media-info-label">File</span>
+                    <span class="media-info-value" id="result-filename"></span>
+                </div>
+                <div class="media-info-row">
+                    <span class="media-info-label">Duration</span>
+                    <span class="media-info-value" id="result-duration"></span>
+                </div>
+                <div class="media-info-row">
+                    <span class="media-info-label">Size</span>
+                    <span class="media-info-value" id="result-filesize"></span>
+                </div>
+                <div class="media-info-row">
+                    <span class="media-info-label">Uploader</span>
+                    <span class="media-info-value" id="result-uploader"></span>
+                </div>
+            </div>
+            <div class="preview-footer">
+                <div class="preview-path">
+                    <span class="path-label">Saved to:</span>
+                    <code id="result-filepath"></code>
+                </div>
+                <button class="btn-open-folder" onclick="openFolder('saved')">
+                    📂 Open Folder
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Pluck · For personal use only</p>
+    </footer>
+
+    <script>
+        let savedFolder = ''
+        let previewTimeout = null
+
+        async function openFolder(mode) {
+            const folder = savedFolder
+            if (!folder) return
+            await fetch('/api/open-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder })
+            })
+        }
+
+        function onUrlPaste() {
+            setTimeout(() => fetchVideoPreview(), 100)
+        }
+
+        function onUrlInput() {
+            const url = document.getElementById('media-url').value.trim()
+            document.getElementById('clear-btn').style.display = url ? 'flex' : 'none'
+            if (!url) {
+                document.getElementById('video-preview').style.display = 'none'
+            }
+            clearTimeout(previewTimeout)
+            if (url) previewTimeout = setTimeout(() => fetchVideoPreview(), 800)
+        }
+
+        function clearUrl() {
+            document.getElementById('media-url').value = ''
+            document.getElementById('clear-btn').style.display = 'none'
+            document.getElementById('video-preview').style.display = 'none'
+            document.getElementById('status').style.display = 'none'
+            document.getElementById('result').style.display = 'none'
+        }
+
+        async function fetchVideoPreview() {
+            const url = document.getElementById('media-url').value.trim()
+            if (!url || !url.includes('youtube')) return
+            try {
+                const response = await fetch('/api/video-info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                })
+                const data = await response.json()
+                if (data.success) {
+                    document.getElementById('preview-title').textContent = data.title
+                    document.getElementById('preview-uploader').textContent = data.uploader
+                    document.getElementById('preview-duration').textContent = data.duration
+                    const thumb = document.getElementById('video-thumb')
+                    if (data.thumbnail) {
+                        thumb.style.backgroundImage = `url(${data.thumbnail})`
+                        thumb.style.backgroundSize = 'cover'
+                        thumb.style.backgroundPosition = 'center'
+                    }
+                    document.getElementById('video-preview').style.display = 'flex'
+                }
+            } catch (e) {}
+        }
+
+        function onMediaTypeChange() {
+            const type = document.getElementById('media-type').value
+            const q = document.getElementById('media-quality')
+            if (type === 'audio') {
+                q.innerHTML = `
+                    <option value="best">Best Quality</option>
+                    <option value="320">High (320kbps)</option>
+                    <option value="192">Medium (192kbps)</option>
+                    <option value="128">Low (128kbps)</option>`
+            } else {
+                q.innerHTML = `
+                    <option value="best">Best Quality</option>
+                    <option value="2k">2K (1440p)</option>
+                    <option value="1080">Full HD (1080p)</option>
+                    <option value="720">HD (720p)</option>
+                    <option value="480">SD (480p)</option>`
+            }
+        }
+
+        async function downloadMedia() {
+            const url       = document.getElementById('media-url').value.trim()
+            const mediaType = document.getElementById('media-type').value
+            const quality   = document.getElementById('media-quality').value
+
+            if (!url) {
+                showStatus('error', '✗', 'Please paste a YouTube URL first')
+                return
+            }
+
+            const btn = document.getElementById('download-btn')
+            btn.disabled = true
+            btn.innerHTML = '<span class="btn-icon spinning">↻</span> Plucking...'
+            showStatus('loading', '↻', `Downloading ${mediaType === 'audio' ? 'audio' : 'video'}... this may take a minute`)
+            document.getElementById('result').style.display = 'none'
+
+            try {
+                const response = await fetch('/api/download-media', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url,
+                        media_type: mediaType,
+                        quality,
+                        output_folder: getDefaultFolder()
+                    })
+                })
+                const data = await response.json()
+                if (data.success) {
+                    savedFolder = data.folder
+                    showStatus('success', '✓', data.message)
+                    showResult(data)
+                } else {
+                    showStatus('error', '✗', data.error)
+                }
+            } catch (err) {
+                showStatus('error', '✗', 'Connection error: ' + err.message)
+            } finally {
+                btn.disabled = false
+                btn.innerHTML = '<span class="btn-icon">↓</span> Pluck It!'
+            }
+        }
+
+        let defaultFolder = ''
+        fetch('/api/default-folder')
+            .then(r => r.json())
+            .then(data => { defaultFolder = data.folder })
+
+        function getDefaultFolder() { return defaultFolder }
+
+        function showStatus(type, icon, message) {
+            const box = document.getElementById('status')
+            box.style.display = 'block'
+            box.className = 'status-box ' + type
+            document.getElementById('status-icon').textContent = icon
+            document.getElementById('status-message').textContent = message
+            document.getElementById('status-details').textContent = ''
+        }
+
+        function showResult(data) {
+            const box = document.getElementById('result')
+            box.style.display = 'block'
+            document.getElementById('result-title').textContent = data.title
+            document.getElementById('result-meta').textContent =
+                data.media_type === 'audio' ? '🎵 MP3' : '🎬 MP4'
+            document.getElementById('result-filename').textContent = data.filename
+            document.getElementById('result-duration').textContent = data.duration
+            document.getElementById('result-filesize').textContent = data.filesize
+            document.getElementById('result-uploader').textContent = data.uploader
+            document.getElementById('result-filepath').textContent = data.filepath
+        }
+    </script>
+</body>
+</html>
