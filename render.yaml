@@ -2,7 +2,7 @@ services:
   - type: web
     name: pluck
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip install -U yt-dlp && pip install yt-dlp-invidious
     startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
